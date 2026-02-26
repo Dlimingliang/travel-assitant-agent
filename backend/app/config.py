@@ -25,9 +25,10 @@ class Settings(BaseSettings):
     unsplash_secret_key: str = ""
 
     # LLM配置 (从环境变量读取)
-    openai_api_key: str = ""
-    openai_base_url: str = ""
-    openai_model: str = ""
+    llm_api_key: str = ""
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_timeout: int = 60
 
     # 日志配置
     log_level: str = ""
@@ -48,6 +49,30 @@ def get_settings() -> Settings:
     """获取配置实例"""
     return settings
 
+# 验证必要的配置
+def validate_config():
+    """验证配置是否完整"""
+    errors = []
+    warnings = []
+
+    if not settings.amap_api_key:
+        errors.append("AMAP_API_KEY未配置")
+
+    llm_api_key = settings.llm_api_key
+    if not llm_api_key:
+        warnings.append("LLM_API_KEY未配置,LLM功能可能无法使用")
+
+    if errors:
+        error_msg = "配置错误:\n" + "\n".join(f"  - {e}" for e in errors)
+        raise ValueError(error_msg)
+
+    if warnings:
+        print("\n⚠️  配置警告:")
+        for w in warnings:
+            print(f"  - {w}")
+
+    return True
+
 # 打印配置信息(用于调试)
 def print_config():
     """打印当前配置(隐藏敏感信息)"""
@@ -57,9 +82,9 @@ def print_config():
     print(f"高德地图API Key: {'已配置' if settings.amap_api_key else '未配置'}")
 
     # 检查LLM配置
-    llm_api_key = os.getenv("LLM_API_KEY") or settings.openai_api_key
-    llm_base_url = os.getenv("LLM_BASE_URL") or settings.openai_base_url
-    llm_model = os.getenv("LLM_MODEL_ID") or settings.openai_model
+    llm_api_key = settings.llm_api_key
+    llm_base_url = settings.llm_base_url
+    llm_model = settings.llm_model
 
     print(f"LLM API Key: {'已配置' if llm_api_key else '未配置'}")
     print(f"LLM Base URL: {llm_base_url}")
