@@ -66,8 +66,8 @@
 | 天数 | 任务 | 详细内容 | 是否完成 |
 |------|------|----------|------|
 | **第1天** | 项目初始化与环境配置 | 1. 创建标准Python项目结构（`src/`、`tests/`、`config/`等）<br>2. 完善`requirements.txt`（添加fastapi、uvicorn、openai、pydantic等）<br>3. 配置虚拟环境，安装依赖<br>4. 编写基础配置文件（如`.env`管理API密钥）<br>5. 设置日志系统 | ✅    |
-| **第2天** | FastAPI基础框架 | 1. 实现FastAPI应用入口（`main.py`）<br>2. 设计健康检查、版本等基础路由<br>3. 添加CORS、中间件等基础配置<br>4. 定义统一的响应模型（`ResponseModel`）<br>5. 编写简单的API文档（Swagger/Redoc） | 未完成  |
-| **第3天** | LLM集成与基础Agent结构 | 1. 封装DeepSeek V3 API调用（使用openai SDK）<br>2. 设计Agent基类（包含对话历史、状态等属性）<br>3. 实现简单的消息处理流程（用户输入 → LLM调用 → 返回回复）<br>4. 编写单元测试框架（pytest） | 未开始  |
+| **第2天** | FastAPI基础框架 | 1. 实现FastAPI应用入口（`main.py`）<br>2. 设计健康检查、版本等基础路由<br>3. 添加CORS、中间件等基础配置<br>4. 定义统一的响应模型（`ResponseModel`）<br>5. 编写简单的API文档（Swagger/Redoc） | ✅    |
+| **第3天** | LLM集成与基础Agent结构 | 1. 封装DeepSeek V3 API调用（使用openai SDK）<br>2. 设计Agent基类（包含对话历史、状态等属性）<br>3. 实现简单的消息处理流程（用户输入 → LLM调用 → 返回回复）<br>4. 编写单元测试框架（pytest） | 开发中  |
 | **第4天** | ReAct循环设计 | 1. 定义ReAct状态机（Thought、Action、Observation、Final Answer）<br>2. 实现思维链（Chain of Thought）提示模板<br>3. 编写ReAct主循环逻辑（解析LLM输出，决定下一步）<br>4. 添加简单的记忆管理（对话历史缓存） | 未开始  |
 | **第5天** | 工具调用机制 | 1. 设计工具注册与发现机制（装饰器或注册表）<br>2. 实现工具调用解析（从LLM输出提取工具名和参数）<br>3. 编写工具执行器（安全调用、异常处理）<br>4. 添加工具结果观察（Observation）生成 | 未开始  |
 | **第6天** | 多轮对话与状态持久化 | 1. 实现会话管理（Session ID、对话历史存储）<br>2. 设计状态持久化（可选用内存、Redis或数据库）<br>3. 添加超时、重试等容错机制<br>4. 编写集成测试（模拟多轮对话场景） | 未开始  |
