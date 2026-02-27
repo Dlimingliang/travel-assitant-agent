@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from .routes import trip
 from ..config import get_settings,print_config,validate_config
 
 # 获取配置
@@ -59,6 +60,8 @@ app.add_middleware(
 )
 
 # 注册路由
+app.include_router(trip.router, prefix="/api")
+
 @app.get("/")
 async def root():
     return {
