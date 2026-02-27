@@ -1,7 +1,7 @@
 from openai import OpenAI
 # main测试时使用
 #from backend.app.config import get_settings
-from ..config import get_settings
+from backend.app.config import get_settings
 
 # 全局LLM实例
 _llm_instance = None

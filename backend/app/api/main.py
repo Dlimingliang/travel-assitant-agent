@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from .routes import trip
 from ..config import get_settings,print_config,validate_config
+from ..agents.react_agent import ReActAgent
+from ..core import memory, llm_message
 
 # 获取配置
 settings = get_settings()
@@ -22,6 +24,10 @@ async def lifespan(app: FastAPI):
     try:
         validate_config()
         print("\n✅ 配置验证通过")
+        agent = ReActAgent(name=settings.app_name, role=settings.app_name, memory=memory.Memory())
+        message = llm_message.LlmMessage(role=llm_message.MessageRole.user,content="介绍你自己")
+        messages = [message.to_dict()]
+        agent.call_llm(messages=messages)
     except ValueError as e:
         print(f"\n❌ 配置验证失败:\n{e}")
         print("\n请检查.env文件并确保所有必要的配置项都已设置")
