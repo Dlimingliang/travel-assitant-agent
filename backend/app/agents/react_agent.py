@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from ..core.memory import Memory
 from ..core.llm_client import get_llm
-from ..models.schemas import UserTripPlan
+from ..models.schemas import UserTripPlan, AgentResponse,TripPlanType
 
 class AgentState(Enum):
     """agent状态枚举"""
@@ -13,20 +13,37 @@ class AgentState(Enum):
     PERCEIVING = "perceiving"
     PLANNING = "planning"
     CLARIFY = "clarify" # 需要追问
-    ACTING = "acting"
+    EXECUTING = "executing"
     TOOL_CALL = "tool_call"
     ERROR = "error"
 
 class ReActAgent(BaseModel):
     name: str = Field(..., description="名称")
     role: str = Field(..., description="助手")
+    state: AgentState = AgentState.IDLE
     memory: Memory = Field(description="记忆")
     tools: dict[str, Any] = Field(description="工具", default={})
     prompt: str = Field(description="提示词",default="")
 
-    # 收集用户信息，不足的时候要进行返回进行追问
-    def perceiving(self, session_id: str,user_input: str) -> UserTripPlan:
+    def process(self, session_id:str, user_input:str) -> AgentResponse:
+
+        # 感知阶段
+        perceive_response = self.perceiving(session_id, user_input)
+        if perceive_response != "":
+            return AgentResponse(
+                type = TripPlanType.clarify,
+                message = perceive_response,
+            )
+        # 感知结束，拿到了必要的信息，开始执行规划和tool调用
+        # react开始 进入规划、行动、观察
+
+        return AgentResponse(
+        )
+
+
+    def perceiving(self, session_id: str,user_input: str) -> str:
         """感知用户输入，确认是否追问，如果需要，则进行追问，如果不需要则进行后面的阶段"""
+        self.state = AgentState.PERCEIVING
         current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
         print(f"用户输入: {user_input}")
@@ -86,13 +103,17 @@ class ReActAgent(BaseModel):
             # 处理空内容的情况
             raise Exception("llm返回为空")
         user_trip_plan = UserTripPlan(**json.loads(content))
+        # 把现在这个当做工作记忆
+        self.memory.work_memory[session_id] = content
         print(f"解析后的UserTripPlan: {user_trip_plan}")
-        return user_trip_plan
+        if not user_trip_plan.complete:
+            return user_trip_plan.missing_fields
+        return ""
 
-
-    # 收集到了必要信息，开始进行规划、规划完成进行行动阶段
-
-    # 行动之后添加返回结果继续执行
-
-    # 最后返回结果, 返回结果需要进行规范格式
-
+    def planning(self, session_id: str, user_input: str) -> str:
+        """有了用户的意图，开始规划行动"""
+        self.state = AgentState.PLANNING
+        # 获取当前的工作目标
+        current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
+        current_info_str = json.dumps(current_info, ensure_ascii=False)
+        prompt = f"""

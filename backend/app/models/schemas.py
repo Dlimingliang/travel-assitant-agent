@@ -1,33 +1,10 @@
+from enum import Enum
 from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator
 
 # 请求模型
 class TripRequest(BaseModel):
     input: str = Field(..., description="用户自然语言输入")
-
-class UserTripPlan(BaseModel):
-    """旅行规划请求"""
-    complete: bool = Field(..., description="是否收集到了完整的信息")
-    city: Optional[str] = Field(None,description="目的地城市")
-    start_date: Optional[str] = Field(None,description="开始日期 YYYY-MM-DD")
-    travel_days: Optional[int] = Field(None,description="旅行天数")
-    accommodation: Optional[str] = Field(None,description="住宿偏好")
-    free_text_input: Optional[str] = Field(None,description="额外要求")
-    missing_fields: Optional[str] = Field(None, description="需要补全的信息")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "complete": True,
-                "city": "北京",
-                "start_date": "2025-06-01",
-                "travel_days": 3,
-                "accommodation": "经济型酒店",
-                "free_text_input": "希望多安排一些博物馆",
-                "missing_fields": "请告诉我更多的信息,包括目的地城市,旅行天数"
-            }
-        }
-
 
 # 响应模型
 class Location(BaseModel):
@@ -121,9 +98,14 @@ class TripPlan(BaseModel):
     overall_suggestions: str = Field(..., description="总体建议")
     budget: Optional[Budget] = Field(default=None, description="预算信息")
 
+class TripPlanType(Enum):
+    clarify = "clarify"
+    stop = "stop"
+
 class TripPlanResponse(BaseModel):
     """旅行计划响应"""
     success: bool = Field(..., description="是否成功")
+    type: TripPlanType = Field(..., description="响应类型 用于判定是结束还是追问")
     message: str = Field(default="", description="消息")
     data: Optional[TripPlan] = Field(default=None, description="旅行计划数据")
 
@@ -164,3 +146,32 @@ class WeatherResponse(BaseModel):
     success: bool = Field(..., description="是否成功")
     message: str = Field(default="", description="消息")
     data: list[WeatherInfo] = Field(default=[], description="天气信息")
+
+# agent模型
+class UserTripPlan(BaseModel):
+    """旅行规划请求"""
+    complete: bool = Field(..., description="是否收集到了完整的信息")
+    city: Optional[str] = Field(None,description="目的地城市")
+    start_date: Optional[str] = Field(None,description="开始日期 YYYY-MM-DD")
+    travel_days: Optional[int] = Field(None,description="旅行天数")
+    accommodation: Optional[str] = Field(None,description="住宿偏好")
+    free_text_input: Optional[str] = Field(None,description="额外要求")
+    missing_fields: Optional[str] = Field(None, description="需要补全的信息")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "complete": True,
+                "city": "北京",
+                "start_date": "2025-06-01",
+                "travel_days": 3,
+                "accommodation": "经济型酒店",
+                "free_text_input": "希望多安排一些博物馆",
+                "missing_fields": "请告诉我更多的信息,包括目的地城市,旅行天数"
+            }
+        }
+
+class AgentResponse(BaseModel):
+    """业务和agent交互的结果"""
+    type: TripPlanType = Field(description="响应类型，clarify， stop 用于判定追问还是结束")
+    message: str = Field(default="", description="消息")
