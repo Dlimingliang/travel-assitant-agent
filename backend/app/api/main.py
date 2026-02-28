@@ -25,9 +25,7 @@ async def lifespan(app: FastAPI):
         validate_config()
         print("\n✅ 配置验证通过")
         agent = ReActAgent(name=settings.app_name, role=settings.app_name, memory=memory.Memory())
-        message = llm_message.LlmMessage(role=llm_message.MessageRole.user,content="介绍你自己")
-        messages = [message.to_dict()]
-        agent.call_llm(messages=messages)
+        agent.perceiving("123123","帮我规划一个北京的旅游计划")
     except ValueError as e:
         print(f"\n❌ 配置验证失败:\n{e}")
         print("\n请检查.env文件并确保所有必要的配置项都已设置")
