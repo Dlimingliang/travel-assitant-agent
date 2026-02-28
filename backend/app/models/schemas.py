@@ -13,7 +13,7 @@ class UserTripPlan(BaseModel):
     travel_days: Optional[int] = Field(None,description="旅行天数")
     accommodation: Optional[str] = Field(None,description="住宿偏好")
     free_text_input: Optional[str] = Field(None,description="额外要求")
-    missing_fields: list[str] = Field(default_factory=list, description="需要补全的信息")
+    missing_fields: Optional[str] = Field(None, description="需要补全的信息")
 
     class Config:
         json_schema_extra = {
@@ -24,7 +24,7 @@ class UserTripPlan(BaseModel):
                 "travel_days": 3,
                 "accommodation": "经济型酒店",
                 "free_text_input": "希望多安排一些博物馆",
-                "missing_fields": ["目的地城市","旅行天数"]
+                "missing_fields": "请告诉我更多的信息,包括目的地城市,旅行天数"
             }
         }
 

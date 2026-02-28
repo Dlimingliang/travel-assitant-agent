@@ -43,7 +43,6 @@ class ReActAgent(BaseModel):
 1. 必要信息包括（必须提取以下所有字段）：
    - city（目的地城市，例如"北京"）
    - start_date（开始日期，格式YYYY-MM-DD，例如"2025-06-01"）
-   - end_date（结束日期，格式YYYY-MM-DD，例如"2025-06-03"）
    - travel_days（旅行天数，整数，例如3）
    - accommodation（住宿偏好，例如"经济型酒店"）
 2. 额外信息：free_text_input（额外要求，例如"希望多安排一些博物馆"）
@@ -51,27 +50,24 @@ class ReActAgent(BaseModel):
 4. 如果用户消息中没有提到某个字段，但当前信息中已有，则保留
 5. 如果新消息与旧信息冲突，以新消息为准
 6. complete 字段表示是否所有必要信息都已收集（布尔值）
-7. missing_fields 列出所有尚未收集的必要信息，用中文列出，例如["开始日期", "结束日期", "旅行天数", "住宿偏好"]
-8. 请返回完整的 UserTripPlan，包含所有字段，即使某些字段没有值也设置为 null
-9. 请严格按照 JSON Schema 格式返回，确保字段名与 schema 一致
-10. 必须返回以下所有字段：complete, city, start_date, end_date, travel_days, accommodation, free_text_input, missing_fields
-11. 每个字段都必须出现在JSON中，即使值为null
+7. missing_fields 列出所有尚未收集的必要信息，用中文列出，并总结为一句话,例如:请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数
+8. 请严格按照 JSON Schema 格式返回，确保字段名与 schema 一致
+9. 必须返回以下所有字段：complete, city, start_date, travel_days, accommodation, free_text_input, missing_fields
+10. 每个字段都必须出现在JSON中，即使值为null
 
 示例JSON格式：
 {{
   "complete": false,
   "city": "北京",
   "start_date": null,
-  "end_date": null,
   "travel_days": null,
   "accommodation": null,
   "free_text_input": null,
-  "missing_fields": ["开始日期", "结束日期", "旅行天数", "住宿偏好"]
+  "missing_fields": "请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数"
 }}
 """
         llm = get_llm()
         print(f"🧠 正在调用 {llm.model} 模型...")
-        print(f"使用的JSON Schema字段: {list(UserTripPlan.model_json_schema().get('properties', {}).keys())}")
         response = llm.client.chat.completions.create(
             model = llm.model,
             messages = [{"role":"user","content":prompt}],
@@ -86,15 +82,10 @@ class ReActAgent(BaseModel):
         )
         print(f"assistant response: {response}")
         content = response.choices[0].message.content
-        print(f"LLM返回的content: {content}")
         if content is None:
             # 处理空内容的情况
             raise Exception("llm返回为空")
-        try:
-            user_trip_plan = UserTripPlan(**json.loads(content))
-        except Exception as e:
-            print(f"解析LLM返回的JSON失败: {e}, content: {content}")
-            raise
+        user_trip_plan = UserTripPlan(**json.loads(content))
         print(f"解析后的UserTripPlan: {user_trip_plan}")
         return user_trip_plan
 
