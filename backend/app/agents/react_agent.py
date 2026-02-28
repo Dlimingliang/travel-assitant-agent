@@ -31,41 +31,41 @@ class ReActAgent(BaseModel):
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
         print(f"用户输入: {user_input}")
         prompt = f"""
-你是一个旅行助手，需要从用户的对话中提取旅行信息。
-
-当前已经收集到的信息:
-{current_info_str}
-
-用户的最新消息:
-{user_input}
-
-请提取信息，并按以下规则处理：
-1. 必要信息包括（必须提取以下所有字段）：
-   - city（目的地城市，例如"北京"）
-   - start_date（开始日期，格式YYYY-MM-DD，例如"2025-06-01"）
-   - travel_days（旅行天数，整数，例如3）
-   - accommodation（住宿偏好，例如"经济型酒店"）
-2. 额外信息：free_text_input（额外要求，例如"希望多安排一些博物馆"）
-3. 如果用户消息中提供了新信息，更新对应字段
-4. 如果用户消息中没有提到某个字段，但当前信息中已有，则保留
-5. 如果新消息与旧信息冲突，以新消息为准
-6. complete 字段表示是否所有必要信息都已收集（布尔值）
-7. missing_fields 列出所有尚未收集的必要信息，用中文列出，并总结为一句话,例如:请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数
-8. 请严格按照 JSON Schema 格式返回，确保字段名与 schema 一致
-9. 必须返回以下所有字段：complete, city, start_date, travel_days, accommodation, free_text_input, missing_fields
-10. 每个字段都必须出现在JSON中，即使值为null
-
-示例JSON格式：
-{{
-  "complete": false,
-  "city": "北京",
-  "start_date": null,
-  "travel_days": null,
-  "accommodation": null,
-  "free_text_input": null,
-  "missing_fields": "请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数"
-}}
-"""
+        你是一个旅行助手，需要从用户的对话中提取旅行信息。
+        
+        当前已经收集到的信息:
+        {current_info_str}
+        
+        用户的最新消息:
+        {user_input}
+        
+        请提取信息，并按以下规则处理：
+        1. 必要信息包括（必须提取以下所有字段）：
+           - city（目的地城市，例如"北京"）
+           - start_date（开始日期，格式YYYY-MM-DD，例如"2025-06-01"）
+           - travel_days（旅行天数，整数，例如3）
+           - accommodation（住宿偏好，例如"经济型酒店"）
+        2. 额外信息：free_text_input（额外要求，例如"希望多安排一些博物馆"）
+        3. 如果用户消息中提供了新信息，更新对应字段
+        4. 如果用户消息中没有提到某个字段，但当前信息中已有，则保留
+        5. 如果新消息与旧信息冲突，以新消息为准
+        6. complete 字段表示是否所有必要信息都已收集（布尔值）
+        7. missing_fields 列出所有尚未收集的必要信息，用中文列出，并总结为一句话,例如:请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数
+        8. 请严格按照 JSON Schema 格式返回，确保字段名与 schema 一致
+        9. 必须返回以下所有字段：complete, city, start_date, travel_days, accommodation, free_text_input, missing_fields
+        10. 每个字段都必须出现在JSON中，即使值为null
+        
+        示例JSON格式：
+        {{
+          "complete": false,
+          "city": "北京",
+          "start_date": null,
+          "travel_days": null,
+          "accommodation": null,
+          "free_text_input": null,
+          "missing_fields": "请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数"
+        }}
+        """
         llm = get_llm()
         print(f"🧠 正在调用 {llm.model} 模型...")
         response = llm.client.chat.completions.create(
