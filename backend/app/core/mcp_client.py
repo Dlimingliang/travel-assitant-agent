@@ -537,11 +537,6 @@ class MCPClientRegistry:
                     tool.metadata["server"] = server_name
                     tool.metadata["original_name"] = tool_name
                     self._tools[full_name] = tool
-                    
-                    # Also add without prefix for backward compatibility
-                    # (if there's no conflict)
-                    if tool_name not in self._tools:
-                        self._tools[tool_name] = tool
             except Exception as e:
                 print(f"Warning: Failed to get tools from server '{server_name}': {e}")
     

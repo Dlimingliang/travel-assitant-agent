@@ -107,9 +107,9 @@ class ReActAgent(BaseModel):
             raise Exception("llm返回为空")
         user_trip_plan = UserTripPlan(**json.loads(content))
         # 把现在这个当做工作记忆
-        self.memory.work_memory[session_id] = content
+        self.memory.add_work_memory(session_id=session_id, value=content)
         print(f"解析后的UserTripPlan: {user_trip_plan}")
-        if not user_trip_plan.complete:
+        if not user_trip_plan.complete and user_trip_plan.missing_fields is not None:
             return user_trip_plan.missing_fields
         return ""
 
@@ -138,42 +138,11 @@ class ReActAgent(BaseModel):
         return ""
     
     def call_tool(self, tool_name: str, **kwargs) -> Any:
-        """
-        调用指定的MCP工具
-        
-        Args:
-            tool_name: 工具名称（可以是原始名称或带服务器前缀的名称）
-            **kwargs: 工具参数
-            
-        Returns:
-            工具调用结果
-            
-        Raises:
-            KeyError: 如果工具不存在
-            Exception: 工具调用失败
-        """
+        """调用指定的MCP工具"""
         if tool_name not in self.tools:
-            # 尝试查找不带前缀的工具名
-            available = list(self.tools.keys())
-            # 如果工具名包含点，可能是server.tool格式
-            if "." in tool_name:
-                # 已经尝试过完整名称，直接报错
-                raise KeyError(f"工具 '{tool_name}' 不存在。可用工具: {available}")
-            else:
-                # 尝试查找带前缀的版本
-                prefixed = [name for name in available if name.endswith(f".{tool_name}")]
-                if prefixed:
-                    tool_name = prefixed[0]
-                else:
-                    raise KeyError(f"工具 '{tool_name}' 不存在。可用工具: {available}")
+            raise KeyError(f"工具 '{tool_name}' 不存在。可用工具: {list(self.tools.keys())}")
         
-        tool = self.tools[tool_name]
         print(f"🔧 调用工具: {tool_name} with args: {kwargs}")
-        
-        try:
-            result = tool.call(**kwargs)
-            print(f"✅ 工具调用成功: {tool_name}")
-            return result
-        except Exception as e:
-            print(f"❌ 工具调用失败: {tool_name}, error: {e}")
-            raise
+        result = self.tools[tool_name].call(**kwargs)
+        print(f"✅ 工具调用成功: {tool_name}")
+        return result
