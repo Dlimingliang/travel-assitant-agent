@@ -1,10 +1,11 @@
 import json
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 from ..core.memory import Memory
 from ..core.llm_client import get_llm
+from ..core.mcp_client import  MCPTool
 from ..models.schemas import UserTripPlan, AgentResponse,TripPlanType
 
 class AgentState(Enum):
@@ -18,11 +19,13 @@ class AgentState(Enum):
     ERROR = "error"
 
 class ReActAgent(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     name: str = Field(..., description="名称")
     role: str = Field(..., description="助手")
     state: AgentState = AgentState.IDLE
     memory: Memory = Field(description="记忆")
-    tools: dict[str, Any] = Field(description="工具", default={})
+    tools: dict[str, MCPTool] = Field(description="工具", default={})
     prompt: str = Field(description="提示词",default="")
 
     def process(self, session_id:str, user_input:str) -> AgentResponse:
@@ -113,7 +116,64 @@ class ReActAgent(BaseModel):
     def planning(self, session_id: str, user_input: str) -> str:
         """有了用户的意图，开始规划行动"""
         self.state = AgentState.PLANNING
-        # 获取当前的工作目标
-        current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
-        current_info_str = json.dumps(current_info, ensure_ascii=False)
-        prompt = f"""
+        
+        # 示例：如果有工具，可以调用MCP工具
+        if self.tools:
+            print(f"🔧 Agent有 {len(self.tools)} 个可用工具")
+            
+            # 示例：查找地理编码工具（高德地图可能提供）
+            geocode_tools = [name for name in self.tools.keys() if "geocode" in name.lower()]
+            if geocode_tools:
+                tool_name = geocode_tools[0]
+                print(f"尝试调用工具: {tool_name}")
+                
+                # 示例调用（需要实际参数）
+                # try:
+                #     result = self.call_tool(tool_name, address="北京市")
+                #     print(f"工具调用结果: {result}")
+                # except Exception as e:
+                #     print(f"工具调用失败: {e}")
+        
+        # TODO: Implement planning logic
+        return ""
+    
+    def call_tool(self, tool_name: str, **kwargs) -> Any:
+        """
+        调用指定的MCP工具
+        
+        Args:
+            tool_name: 工具名称（可以是原始名称或带服务器前缀的名称）
+            **kwargs: 工具参数
+            
+        Returns:
+            工具调用结果
+            
+        Raises:
+            KeyError: 如果工具不存在
+            Exception: 工具调用失败
+        """
+        if tool_name not in self.tools:
+            # 尝试查找不带前缀的工具名
+            available = list(self.tools.keys())
+            # 如果工具名包含点，可能是server.tool格式
+            if "." in tool_name:
+                # 已经尝试过完整名称，直接报错
+                raise KeyError(f"工具 '{tool_name}' 不存在。可用工具: {available}")
+            else:
+                # 尝试查找带前缀的版本
+                prefixed = [name for name in available if name.endswith(f".{tool_name}")]
+                if prefixed:
+                    tool_name = prefixed[0]
+                else:
+                    raise KeyError(f"工具 '{tool_name}' 不存在。可用工具: {available}")
+        
+        tool = self.tools[tool_name]
+        print(f"🔧 调用工具: {tool_name} with args: {kwargs}")
+        
+        try:
+            result = tool.call(**kwargs)
+            print(f"✅ 工具调用成功: {tool_name}")
+            return result
+        except Exception as e:
+            print(f"❌ 工具调用失败: {tool_name}, error: {e}")
+            raise
