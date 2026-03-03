@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Any, Optional, List, Dict
 
 from pydantic import BaseModel, Field
+
+from ..core import LlmMessage, MessageRole
 from ..core.memory import Memory
 from ..core.llm_client import get_llm
 from ..core.mcp_client import  MCPTool
@@ -139,60 +141,85 @@ class ReActAgent(BaseModel):
             return user_trip_plan.missing_fields
         return ""
 
-    def planning(self, session_id: str, user_input: str) -> str:
+    def planning(self, session_id: str, user_input: str) -> str | None | Any:
         """有了用户的意图，开始规划行动"""
         self.state = AgentState.PLANNING
+        self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
+            role= MessageRole.user,
+            content=user_input,
+        ))
+
+        print(f"😁用户需求: {user_input}")
+
         llm = get_llm()
-        print(f"🧠 正在调用 {llm.model} 模型...")
 
         # 获取 OpenAI Function Calling 格式的工具列表
         openai_tools = self.get_tools_for_openai()
-        print(f"📋 可用工具描述:\n{openai_tools}\n")
 
-        prompt = f"""你是一个旅游助手，你可以使用以下工具来帮助用户完成任务。
+        current_step = 0
+        while current_step < 10:
+            current_step += 1
 
-        ## 用户的最新输入:
-        {user_input}
+            historyStr = json.dumps([msg.to_dict() for msg in self.memory.short_memory.get(session_id, [])], ensure_ascii=False)
+            work_info = self.memory.work_memory.get(session_id, {})
+            prompt = f"""你是一个旅游助手，你可以使用以下工具来帮助用户完成任务。
 
-        ## 工作流程:
-        1. 思考（Thought）: 分析用户需求，思考需要什么信息或采取什么行动
-        2. 行动（Action）: 如果需要调用工具，请明确指出要调用哪个工具以及需要的参数
-        3. 观察（Observation）: 根据工具返回的结果进行分析
+                    ## 用户的最新输入:
+                    {user_input}
+                    
+                    # 必要的信息
+                    {work_info}
+                    
+                    # 历史消息
+                    History: {historyStr}
 
-        请开始你的思考，如果需要调用工具,则返回工具调用
-        如果不需要调用工具，可以直接回答用户。
-        """
-        
-        # 方式一：使用 OpenAI 原生 Function Calling（推荐）
-        # 这种方式让大模型直接输出 tool_calls
-        response = llm.client.chat.completions.create(
-            model=llm.model,
-            messages=[{"role": "user", "content": prompt}],
-            tools=openai_tools if openai_tools else None,  # 传入工具定义
-            tool_choice="auto",  # 让模型自动决定是否调用工具
-            temperature=0
-        )
-        
-        print(f"🤖 Assistant response: {response}")
-        
-        # 处理响应
-        message = response.choices[0].message
-        
-        # 检查是否有工具调用
-        if message.tool_calls:
-            for tool_call in message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-                print(f"🔧 模型请求调用工具: {tool_name}")
-                print(f"   参数: {json.dumps(tool_args, ensure_ascii=False)}")
-                
-                #这里可以实际调用工具
-                result = self.call_tool(tool_name, **tool_args)
-                print(f" 工具返回: {result}")
-        else:
-            print(f"💬 模型回复: {message.content}")
-        
-        return message.content or ""
+                    ## 工作流程:
+                    1. 思考（Thought）: 分析用户需求，思考需要什么信息或采取什么行动
+                    2. 行动（Action）: 如果需要调用工具，请明确指出要调用哪个工具以及需要的参数
+                    3. 观察（Observation）: 根据工具返回的结果进行分析
+
+                    请开始你的思考，如果需要调用工具,则返回工具调用
+                    如果不需要调用工具，可以直接回答用户。
+                    """
+
+            print(f"🧠 正在调用 {llm.model} 模型...")
+            response = llm.client.chat.completions.create(
+                model=llm.model,
+                messages=[{"role": "user", "content": prompt}],
+                tools=openai_tools if openai_tools else None,  # 传入工具定义
+                tool_choice="auto",  # 让模型自动决定是否调用工具
+                temperature=0
+            )
+
+           # print(f"🤖 Assistant response: {response}")
+            # 处理响应
+            message = response.choices[0].message
+            # 检查是否有工具调用
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    too_id = tool_call.id
+                    tool_name = tool_call.function.name
+                    tool_args = json.loads(tool_call.function.arguments)
+                    print(f"🔧 模型请求调用工具: {tool_name}")
+                    print(f"   参数: {json.dumps(tool_args, ensure_ascii=False)}")
+                    self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
+                        role=MessageRole.tool_calls,
+                        content=json.dumps({"tool_name": tool_name, "tool_args": tool_args}, ensure_ascii=False),
+                    ))
+                    #这里可以实际调用工具
+                    result = self.call_tool(tool_name, **tool_args)
+                    self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
+                        role=MessageRole.tool_calls,
+                        content=json.dumps(result, ensure_ascii=False),
+                    ))
+            else:
+                print(f"💬 最终回复: {message.content}")
+                self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
+                    role=MessageRole.assistant,
+                    content=json.dumps(message.content, ensure_ascii=False),
+                ))
+                return message.content or ""
+        return None
 
     def call_tool(self, tool_name: str, **kwargs) -> Any:
         """调用指定的MCP工具"""

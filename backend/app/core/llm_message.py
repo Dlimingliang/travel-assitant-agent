@@ -8,6 +8,7 @@ class MessageRole(Enum):
     assistant = "assistant"
     system = "system"
     tools = "tools"
+    tool_calls = "tool_calls"
 
 class LlmMessage(BaseModel):
     """和大模型交互消息类"""

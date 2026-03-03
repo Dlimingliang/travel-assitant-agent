@@ -253,8 +253,8 @@ class MCPClient:
             self._fetch_tools()
             self._initialized = True
             
-            print(f"✅ MCP client connected to {self.server_url}")
-            print(f"✅ Discovered {len(self._tools)} tools")
+            # print(f"✅ MCP client connected to {self.server_url}")
+            # print(f"✅ Discovered {len(self._tools)} tools")
             
         except Exception as e:
             print(f"❌ Failed to initialize MCP client: {e}")

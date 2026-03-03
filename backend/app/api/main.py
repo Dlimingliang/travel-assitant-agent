@@ -34,10 +34,10 @@ async def lifespan(app: FastAPI):
         if settings.amap_api_key and settings.amap_api_key != "your_amap_api_key_here":
             try:
                 client = registry.register_predefined_server("amap", settings.amap_api_key)
-                print(f"✅ 高德地图MCP服务器注册成功，发现 {len(client.list_tools())} 个工具")
+                print(f"✅ MCP服务器注册成功，发现 {len(client.list_tools())} 个工具")
             except Exception as e:
-                print(f"⚠️  高德地图MCP服务器注册失败: {e}")
-                print("   继续启动，但部分地图功能可能不可用")
+                print(f"⚠️  MCP服务器注册失败: {e}")
+                print("   继续启动，但部分功能可能不可用")
         else:
             print("⚠️  未配置高德地图API密钥，跳过MCP服务器注册")
         
@@ -52,10 +52,10 @@ async def lifespan(app: FastAPI):
         print(f"✅ Agent创建完成，加载了 {len(agent.tools)} 个工具")
         
         # 3. 测试工具调用（可选，演示如何使用）
-        if agent.tools:
-            print("\n🔍 可用工具列表:")
-            for tool_name, tool in agent.tools.items():
-                print(f"   - {tool_name}:{tool.schema} {tool.description[:50]}..." if tool.description else f"   - {tool_name}")
+        # if agent.tools:
+        #     print("\n🔍 可用工具列表:")
+        #     for tool_name, tool in agent.tools.items():
+        #         print(f"   - {tool_name}:{tool.schema} {tool.description[:50]}..." if tool.description else f"   - {tool_name}")
             
             #示例：调用一个工具（如果有地理编码工具）
             #注意：实际调用需要参数，这里仅演示调用方式

@@ -7,6 +7,8 @@ class Memory(BaseModel):
     work_memory: dict[str,Any] = Field(default_factory=dict, description="工作记忆")
 
     def add_short_memory(self, session_id:str, memory: LlmMessage):
+        if session_id not in self.short_memory:
+            self.short_memory[session_id] = []
         self.short_memory[session_id].append(memory)
         if len(self.short_memory[session_id]) > 20:
             self.short_memory[session_id].pop(0)
