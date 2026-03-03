@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 from pydantic import BaseModel, Field
 from ..core.memory import Memory
@@ -28,6 +28,32 @@ class ReActAgent(BaseModel):
     tools: dict[str, MCPTool] = Field(description="工具", default={})
     prompt: str = Field(description="提示词",default="")
 
+    def get_tools_for_openai(self) -> List[Dict[str, Any]]:
+        """
+        获取所有工具的 OpenAI Function Calling 格式
+        用于直接传递给 OpenAI API 的 tools 参数
+        
+        Returns:
+            工具列表，每个工具都是 OpenAI function calling 格式
+        """
+        return [tool.to_openai_function_schema() for tool in self.tools.values()]
+    
+    def get_tools_prompt_string(self) -> str:
+        """
+        获取所有工具的人类可读格式，用于放入提示词
+        
+        Returns:
+            工具描述的字符串，适合放入 prompt
+        """
+        if not self.tools:
+            return "暂无可用工具"
+        
+        tool_descriptions = []
+        for tool_name, tool in self.tools.items():
+            tool_descriptions.append(tool.to_prompt_string())
+        
+        return "\n\n".join(tool_descriptions)
+    
     def process(self, session_id:str, user_input:str) -> AgentResponse:
 
         # 感知阶段
@@ -38,7 +64,7 @@ class ReActAgent(BaseModel):
                 message = perceive_response,
             )
         # 感知结束，拿到了必要的信息，开始执行规划和tool调用
-        # react开始 进入规划、行动、观察
+        # react开始 进入thought、action、observation
 
         return AgentResponse(
         )
@@ -116,27 +142,58 @@ class ReActAgent(BaseModel):
     def planning(self, session_id: str, user_input: str) -> str:
         """有了用户的意图，开始规划行动"""
         self.state = AgentState.PLANNING
+        llm = get_llm()
+        print(f"🧠 正在调用 {llm.model} 模型...")
+
+        # 获取 OpenAI Function Calling 格式的工具列表
+        openai_tools = self.get_tools_for_openai()
+        print(f"📋 可用工具描述:\n{openai_tools}\n")
+
+        prompt = f"""你是一个旅游助手，你可以使用以下工具来帮助用户完成任务。
+
+        ## 用户的最新输入:
+        {user_input}
+
+        ## 工作流程:
+        1. 思考（Thought）: 分析用户需求，思考需要什么信息或采取什么行动
+        2. 行动（Action）: 如果需要调用工具，请明确指出要调用哪个工具以及需要的参数
+        3. 观察（Observation）: 根据工具返回的结果进行分析
+
+        请开始你的思考，如果需要调用工具,则返回工具调用
+        如果不需要调用工具，可以直接回答用户。
+        """
         
-        # 示例：如果有工具，可以调用MCP工具
-        if self.tools:
-            print(f"🔧 Agent有 {len(self.tools)} 个可用工具")
-            
-            # 示例：查找地理编码工具（高德地图可能提供）
-            geocode_tools = [name for name in self.tools.keys() if "geocode" in name.lower()]
-            if geocode_tools:
-                tool_name = geocode_tools[0]
-                print(f"尝试调用工具: {tool_name}")
+        # 方式一：使用 OpenAI 原生 Function Calling（推荐）
+        # 这种方式让大模型直接输出 tool_calls
+        response = llm.client.chat.completions.create(
+            model=llm.model,
+            messages=[{"role": "user", "content": prompt}],
+            tools=openai_tools if openai_tools else None,  # 传入工具定义
+            tool_choice="auto",  # 让模型自动决定是否调用工具
+            temperature=0
+        )
+        
+        print(f"🤖 Assistant response: {response}")
+        
+        # 处理响应
+        message = response.choices[0].message
+        
+        # 检查是否有工具调用
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+                print(f"🔧 模型请求调用工具: {tool_name}")
+                print(f"   参数: {json.dumps(tool_args, ensure_ascii=False)}")
                 
-                # 示例调用（需要实际参数）
-                # try:
-                #     result = self.call_tool(tool_name, address="北京市")
-                #     print(f"工具调用结果: {result}")
-                # except Exception as e:
-                #     print(f"工具调用失败: {e}")
+                #这里可以实际调用工具
+                result = self.call_tool(tool_name, **tool_args)
+                print(f" 工具返回: {result}")
+        else:
+            print(f"💬 模型回复: {message.content}")
         
-        # TODO: Implement planning logic
-        return ""
-    
+        return message.content or ""
+
     def call_tool(self, tool_name: str, **kwargs) -> Any:
         """调用指定的MCP工具"""
         if tool_name not in self.tools:

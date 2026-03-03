@@ -64,9 +64,11 @@ async def lifespan(app: FastAPI):
             #     print(f"示例调用结果: {result}")
             # except Exception as e:
             #     print(f"示例调用失败: {e}")
-        
+
         # 4. 测试agent感知（原有逻辑）
         # agent.perceiving("123123","帮我规划一个北京的旅游计划")
+        # 4. 测试agent规划
+        agent.planning("123123", "帮我查询北京天气")
         
     except ValueError as e:
         print(f"\n❌ 配置验证失败:\n{e}")

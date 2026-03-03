@@ -83,6 +83,22 @@ class MCPTool(Tool):
         super().__init__(name, description, metadata={"type": "mcp", "schema": schema})
         self.mcp_client = mcp_client
         self.schema = schema
+        # 完整名称（包含服务器前缀），用于在 Registry 中唯一标识
+        # 会在 MCPClientRegistry._update_tools_cache() 中被设置
+        self._full_name: Optional[str] = None
+    
+    @property
+    def full_name(self) -> str:
+        """
+        获取完整的工具名称（包含服务器前缀）
+        如果没有设置前缀，则返回原始名称
+        """
+        return self._full_name if self._full_name else self.name
+    
+    @full_name.setter
+    def full_name(self, value: str) -> None:
+        """设置完整的工具名称"""
+        self._full_name = value
     
     def call(self, **kwargs) -> Any:
         """Call the tool on the MCP server"""
@@ -93,6 +109,85 @@ class MCPTool(Tool):
         if self.schema and self.schema.parameters:
             return {name: param.dict() for name, param in self.schema.parameters.items()}
         return {}
+    
+    def to_openai_function_schema(self) -> Dict[str, Any]:
+        """
+        将工具转换为 OpenAI Function Calling 格式
+        
+        注意：这里使用 full_name（带服务器前缀）作为工具名称，
+        确保模型返回的工具名称与 tools 字典中的 key 一致。
+        
+        返回格式示例:
+        {
+            "type": "function",
+            "function": {
+                "name": "amap.maps_weather",  # 带前缀的完整名称
+                "description": "查询天气信息",
+                "parameters": {
+                    "type": "object",
+                    "properties": {...},
+                    "required": [...]
+                }
+            }
+        }
+        """
+        # 从 inputSchema 获取参数定义
+        parameters = {"type": "object", "properties": {}, "required": []}
+        
+        if self.schema and self.schema.inputSchema:
+            input_schema = self.schema.inputSchema
+            # inputSchema 通常已经是标准的 JSON Schema 格式
+            parameters = {
+                "type": input_schema.get("type", "object"),
+                "properties": input_schema.get("properties", {}),
+                "required": input_schema.get("required", [])
+            }
+            # 保留其他 JSON Schema 字段（如 additionalProperties）
+            if "additionalProperties" in input_schema:
+                parameters["additionalProperties"] = input_schema["additionalProperties"]
+        
+        # 使用 full_name 确保与 tools 字典的 key 一致
+        return {
+            "type": "function",
+            "function": {
+                "name": self.full_name,
+                "description": self.description or "",
+                "parameters": parameters
+            }
+        }
+    
+    def to_prompt_string(self) -> str:
+        """
+        将工具转换为适合放入提示词的字符串格式
+        
+        返回人类可读的工具描述，便于在 prompt 中使用
+        """
+        schema = self.to_openai_function_schema()
+        func = schema["function"]
+        
+        lines = [
+            f"工具名称: {func['name']}",
+            f"功能描述: {func['description']}",
+            "参数:"
+        ]
+        
+        properties = func["parameters"].get("properties", {})
+        required = func["parameters"].get("required", [])
+        
+        if properties:
+            for param_name, param_info in properties.items():
+                is_required = "必填" if param_name in required else "可选"
+                param_type = param_info.get("type", "any")
+                param_desc = param_info.get("description", "无描述")
+                lines.append(f"  - {param_name} ({param_type}, {is_required}): {param_desc}")
+                
+                # 如果有枚举值，显示出来
+                if "enum" in param_info:
+                    lines.append(f"    可选值: {param_info['enum']}")
+        else:
+            lines.append("  无参数")
+        
+        return "\n".join(lines)
 
 
 class MCPClient:
@@ -536,6 +631,8 @@ class MCPClientRegistry:
                     full_name = f"{server_name}.{tool_name}"
                     tool.metadata["server"] = server_name
                     tool.metadata["original_name"] = tool_name
+                    # 设置完整名称，确保 to_openai_function_schema() 返回带前缀的名称
+                    tool.full_name = full_name
                     self._tools[full_name] = tool
             except Exception as e:
                 print(f"Warning: Failed to get tools from server '{server_name}': {e}")
