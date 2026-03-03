@@ -10,7 +10,7 @@ class Memory(BaseModel):
         if session_id not in self.short_memory:
             self.short_memory[session_id] = []
         self.short_memory[session_id].append(memory)
-        if len(self.short_memory[session_id]) > 20:
+        if len(self.short_memory[session_id]) > 100:
             self.short_memory[session_id].pop(0)
 
     def add_work_memory(self, session_id:str, value: Any):

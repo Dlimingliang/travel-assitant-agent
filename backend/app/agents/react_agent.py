@@ -10,13 +10,113 @@ from ..core.llm_client import get_llm
 from ..core.mcp_client import  MCPTool
 from ..models.schemas import UserTripPlan, AgentResponse,TripPlanType
 
+res_json = """
+```json
+{
+  "city": "城市名称",
+  "start_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "day_index": 0,
+      "description": "第1天行程概述",
+      "transportation": "交通方式",
+      "accommodation": "住宿类型",
+      "hotel": {
+        "name": "酒店名称",
+        "address": "酒店地址",
+        "location": {"longitude": 116.397128, "latitude": 39.916527},
+        "price_range": "300-500元",
+        "rating": "4.5",
+        "distance": "距离景点2公里",
+        "type": "经济型酒店",
+        "estimated_cost": 400
+      },
+      "attractions": [
+        {
+          "name": "景点名称",
+          "address": "详细地址",
+          "location": {"longitude": 116.397128, "latitude": 39.916527},
+          "visit_duration": 120,
+          "description": "景点详细描述",
+          "category": "景点类别",
+          "ticket_price": 60
+        }
+      ],
+      "meals": [
+        {"type": "breakfast", "name": "早餐推荐", "description": "早餐描述", "estimated_cost": 30},
+        {"type": "lunch", "name": "午餐推荐", "description": "午餐描述", "estimated_cost": 50},
+        {"type": "dinner", "name": "晚餐推荐", "description": "晚餐描述", "estimated_cost": 80}
+      ]
+    }
+  ],
+  "weather_info": [
+    {
+      "date": "YYYY-MM-DD",
+      "day_weather": "晴",
+      "night_weather": "多云",
+      "day_temp": 25,
+      "night_temp": 15,
+      "wind_direction": "南风",
+      "wind_power": "1-3级"
+    }
+  ],
+  "overall_suggestions": "总体建议",
+  "budget": {
+    "total_attractions": 180,
+    "total_hotels": 1200,
+    "total_meals": 480,
+    "total_transportation": 200,
+    "total": 2060
+  }
+}
+```
+"""
+
+res_simple_json = """
+{
+  "city": "城市名称",
+  "start_date": "YYYY-MM-DD",
+  "end_date": "YYYY-MM-DD",
+  "days": [
+    {
+      "date": "YYYY-MM-DD",
+      "day_index": 0,
+      "description": "第1天行程概述",
+      "hotel": {
+        "name": "酒店名称",
+        "address": "酒店地址",
+      },
+      "attractions": [
+        {
+          "name": "景点名称",
+          "address": "详细地址",
+        }
+      ]
+    }
+  ],
+  "weather_info": [
+    {
+      "date": "YYYY-MM-DD",
+      "day_weather": "晴",
+      "night_weather": "多云",
+      "day_temp": 25,
+      "night_temp": 15,
+      "wind_direction": "南风",
+      "wind_power": "1-3级"
+    }
+  ],
+  "overall_suggestions": "总体建议"
+}
+"""
+
 class AgentState(Enum):
     """agent状态枚举"""
     IDLE = "idle"
     PERCEIVING = "perceiving"
     PLANNING = "planning"
     CLARIFY = "clarify" # 需要追问
-    EXECUTING = "executing"
     TOOL_CALL = "tool_call"
     ERROR = "error"
 
@@ -40,22 +140,6 @@ class ReActAgent(BaseModel):
         """
         return [tool.to_openai_function_schema() for tool in self.tools.values()]
     
-    def get_tools_prompt_string(self) -> str:
-        """
-        获取所有工具的人类可读格式，用于放入提示词
-        
-        Returns:
-            工具描述的字符串，适合放入 prompt
-        """
-        if not self.tools:
-            return "暂无可用工具"
-        
-        tool_descriptions = []
-        for tool_name, tool in self.tools.items():
-            tool_descriptions.append(tool.to_prompt_string())
-        
-        return "\n\n".join(tool_descriptions)
-    
     def process(self, session_id:str, user_input:str) -> AgentResponse:
 
         # 感知阶段
@@ -68,7 +152,11 @@ class ReActAgent(BaseModel):
         # 感知结束，拿到了必要的信息，开始执行规划和tool调用
         # react开始 进入thought、action、observation
 
+        plan_response = self.planning(session_id, user_input)
+
         return AgentResponse(
+            type = TripPlanType.stop,
+            message = plan_response,
         )
 
 
@@ -77,9 +165,12 @@ class ReActAgent(BaseModel):
         self.state = AgentState.PERCEIVING
         current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
-        print(f"用户输入: {user_input}")
+        print(f"👤 用户输入: {user_input}")
         prompt = f"""
         你是一个旅行助手，需要从用户的对话中提取旅行信息。
+        如果用户的输入中不包含旅行信息，你要友好的提醒它，你能做什么，然后需要他补充什么信息。
+        你的语言要温柔、友好，禁止强硬的预期
+        
         
         当前已经收集到的信息:
         {current_info_str}
@@ -128,7 +219,6 @@ class ReActAgent(BaseModel):
             },
             temperature=0
         )
-        print(f"assistant response: {response}")
         content = response.choices[0].message.content
         if content is None:
             # 处理空内容的情况
@@ -136,7 +226,7 @@ class ReActAgent(BaseModel):
         user_trip_plan = UserTripPlan(**json.loads(content))
         # 把现在这个当做工作记忆
         self.memory.add_work_memory(session_id=session_id, value=content)
-        print(f"解析后的UserTripPlan: {user_trip_plan}")
+        print(f"✅ 感知结束，用户提供信息充足,可以进入规划阶段")
         if not user_trip_plan.complete and user_trip_plan.missing_fields is not None:
             return user_trip_plan.missing_fields
         return ""
@@ -149,8 +239,6 @@ class ReActAgent(BaseModel):
             content=user_input,
         ))
 
-        print(f"😁用户需求: {user_input}")
-
         llm = get_llm()
 
         # 获取 OpenAI Function Calling 格式的工具列表
@@ -162,8 +250,11 @@ class ReActAgent(BaseModel):
 
             historyStr = json.dumps([msg.to_dict() for msg in self.memory.short_memory.get(session_id, [])], ensure_ascii=False)
             work_info = self.memory.work_memory.get(session_id, {})
-            prompt = f"""你是一个旅游助手，你可以使用以下工具来帮助用户完成任务。
-
+            # amap_maps_text_search 搜索景点 keywords 历史文化  city 北京
+            # maps_weather 查询天气 city 北京
+            prompt = f"""你是一个旅游助手, 你可以帮助用户完成旅游规划, 你可以使用工具来帮助用户完成任务。
+                   
+                
                     ## 用户的最新输入:
                     {user_input}
                     
@@ -172,7 +263,15 @@ class ReActAgent(BaseModel):
                     
                     # 历史消息
                     History: {historyStr}
-
+                    
+                    ## 这里面有3项工作你是必须要完成的
+                    1. 帮助用户搜索景点
+                    2. 帮助用户搜索酒店
+                    3. 帮助用户查询天气
+                    4. 当你搜集到了足够的信息，请严格按照以下JSON格式返回旅行计划
+                    {res_simple_json}
+                    
+        
                     ## 工作流程:
                     1. 思考（Thought）: 分析用户需求，思考需要什么信息或采取什么行动
                     2. 行动（Action）: 如果需要调用工具，请明确指出要调用哪个工具以及需要的参数
@@ -180,6 +279,8 @@ class ReActAgent(BaseModel):
 
                     请开始你的思考，如果需要调用工具,则返回工具调用
                     如果不需要调用工具，可以直接回答用户。
+                    注意：当信息足够返回，不需要调用工具的时候，只返回JSON格式的旅行计划，也不用遵循Thought、Action、Observation
+                    重点：只要json，只要json
                     """
 
             print(f"🧠 正在调用 {llm.model} 模型...")
@@ -201,7 +302,6 @@ class ReActAgent(BaseModel):
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     print(f"🔧 模型请求调用工具: {tool_name}")
-                    print(f"   参数: {json.dumps(tool_args, ensure_ascii=False)}")
                     self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
                         role=MessageRole.tool_calls,
                         content=json.dumps({"tool_name": tool_name, "tool_args": tool_args}, ensure_ascii=False),
