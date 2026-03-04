@@ -1,13 +1,12 @@
 # ==========================================
 # 阶段1: 构建前端
 # ==========================================
-# 使用腾讯云镜像源
-FROM mirrors.tencent.com/library/node:18-alpine AS frontend-builder
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
 # 设置 npm 镜像源
-RUN npm config set registry https://mirrors.tencent.com/npm/
+RUN npm config set registry https://registry.npmmirror.com/
 
 # 复制 package.json 和 lock 文件
 COPY frontend/package*.json ./
@@ -27,11 +26,10 @@ RUN npm run build
 # ==========================================
 # 阶段2: 生产运行环境
 # ==========================================
-# 使用腾讯云镜像源
-FROM mirrors.tencent.com/library/python:3.11-slim
+FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
 
-# 安装 Nginx 和 Supervisor（使用国内源加速）
-RUN sed -i 's/deb.debian.org/mirrors.tencent.com/g' /etc/apt/sources.list.d/debian.sources && \
+# 安装 Nginx 和 Supervisor（使用阿里云源加速）
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y \
     nginx \
     supervisor \
@@ -45,8 +43,8 @@ WORKDIR /app
 # 复制后端代码
 COPY backend/ ./backend/
 
-# 安装 Python 依赖（使用腾讯云 PyPI 镜像）
-RUN pip install --no-cache-dir -r backend/requirements.txt -i https://mirrors.tencent.com/pypi/simple/
+# 安装 Python 依赖（使用阿里云 PyPI 镜像）
+RUN pip install --no-cache-dir -r backend/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
 
 # 从前端构建阶段复制静态文件
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
