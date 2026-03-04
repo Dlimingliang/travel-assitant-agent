@@ -17,10 +17,11 @@ RUN npm ci --silent
 # 复制前端源码
 COPY frontend/ ./
 
-# 设置生产环境 API 地址（使用相对路径，通过 Nginx 代理）
-RUN echo "VITE_API_BASE_URL=" > .env
+# 设置生产环境 API 地址（使用空值，让前端使用相对路径通过 Nginx 代理）
+# 必须在 COPY 之后覆盖 .env 文件
+RUN echo "VITE_API_BASE_URL=" > .env.production
 
-# 构建生产版本
+# 构建生产版本（Vite 在 production 模式下会优先读取 .env.production）
 RUN npm run build
 
 # ==========================================
@@ -64,7 +65,7 @@ EXPOSE 80
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost/api/health || exit 1
+    CMD curl -f http://localhost/health || exit 1
 
 # 启动命令
 CMD ["/start.sh"]
