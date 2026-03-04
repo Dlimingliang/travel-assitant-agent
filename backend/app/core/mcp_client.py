@@ -628,7 +628,8 @@ class MCPClientRegistry:
                 server_tools = client.get_tools()
                 for tool_name, tool in server_tools.items():
                     # Add server name prefix to avoid name conflicts
-                    full_name = f"{server_name}.{tool_name}"
+                    # 使用 -- 作为分隔符，符合 OpenAI API 的命名规则 ^[a-zA-Z0-9_-]+$
+                    full_name = f"{server_name}--{tool_name}"
                     tool.metadata["server"] = server_name
                     tool.metadata["original_name"] = tool_name
                     # 设置完整名称，确保 to_openai_function_schema() 返回带前缀的名称
