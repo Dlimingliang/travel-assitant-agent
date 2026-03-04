@@ -281,8 +281,8 @@ class ReActAgent(BaseModel):
 
 | # | 任务 | 工具 | 如何判断已完成 |
 |---|------|------|----------------|
-| 1 | 酒店 | `amap--maps_text_search` (keywords含"酒店") | 历史中有酒店搜索结果 |
-| 2 | 景点 | `amap--maps_text_search` (keywords含景点名) | 历史中有景点搜索结果 |
+| 1 | 酒店 | `amap--maps_text_search` | 历史中有酒店搜索结果 |
+| 2 | 景点 | `amap--maps_text_search` | 历史中有景点搜索结果 |
 | 3 | 天气 | `amap--maps_weather` | 历史中有天气查询结果 |
 
 ---
@@ -291,9 +291,9 @@ class ReActAgent(BaseModel):
 
 **请先逐一检查对话历史，回答以下问题：**
 
-1. 历史中是否已有酒店搜索的调用和结果？（查找 tool_name 包含 maps_text_search 且 keywords 包含"酒店"）
-2. 历史中是否已有景点搜索的调用和结果？（查找 tool_name 包含 maps_text_search 且 keywords 不含"酒店"）
-3. 历史中是否已有天气查询的调用和结果？（查找 tool_name 包含 maps_weather）
+1. 历史中是否已有酒店搜索的调用和结果？
+2. 历史中是否已有景点搜索的调用和结果？
+3. 历史中是否已有天气查询的调用和结果？
 
 **然后根据检查结果决定：**
 
