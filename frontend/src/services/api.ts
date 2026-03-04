@@ -3,7 +3,10 @@ import type { AxiosInstance } from 'axios';
 import type { TripRequest, TripPlanResponse } from '../types';
 
 // API 基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// 生产环境使用空字符串（相对路径），开发环境使用 localhost:8000
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined 
+  ? import.meta.env.VITE_API_BASE_URL 
+  : 'http://localhost:8000';
 
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
@@ -55,7 +58,7 @@ export const tripApi = {
    * @returns 健康状态
    */
   healthCheck: async (): Promise<{ status: string; service: string; version: string }> => {
-    const response = await apiClient.get('/health');
+    const response = await apiClient.get('/api/health');
     return response.data;
   },
 };
