@@ -1,7 +1,7 @@
 # ==========================================
 # 阶段1: 构建前端
 # ==========================================
-FROM registry.cn-hangzhou.aliyuncs.com/library/node:18-alpine AS frontend-builder
+FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
@@ -26,7 +26,7 @@ RUN npm run build
 # ==========================================
 # 阶段2: 生产运行环境
 # ==========================================
-FROM registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
+FROM python:3.11-slim
 
 # 安装 Nginx 和 Supervisor（使用阿里云源加速）
 RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
