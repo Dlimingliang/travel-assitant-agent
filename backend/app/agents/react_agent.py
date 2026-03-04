@@ -226,9 +226,10 @@ class ReActAgent(BaseModel):
         user_trip_plan = UserTripPlan(**json.loads(content))
         # 把现在这个当做工作记忆
         self.memory.add_work_memory(session_id=session_id, value=content)
-        print(f"✅ 感知结束，用户提供信息充足,可以进入规划阶段")
         if not user_trip_plan.complete and user_trip_plan.missing_fields is not None:
+            print(f"❌感知结束，用户提供信息不足,需要补充信息")
             return user_trip_plan.missing_fields
+        print(f"✅ 感知结束，用户提供信息充足,可以进入规划阶段")
         return ""
 
     def planning(self, session_id: str, user_input: str) -> str | None | Any:

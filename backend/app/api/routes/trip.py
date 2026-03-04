@@ -1,10 +1,14 @@
+from fastapi.routing import APIRouter
+
+
 from fastapi import APIRouter, HTTPException
 from ...models.schemas import (
     TripRequest,
     TripPlanResponse,
 )
+from ...core.agent_manager import get_agent
 
-router = APIRouter(prefix="/trip", tags=["旅行规划"])
+router: APIRouter = APIRouter(prefix="/trip", tags=["旅行规划"])
 
 @router.post(
     "/plan",
@@ -26,8 +30,14 @@ async def plan_trip(request: TripRequest):
         print(f"\n{'=' * 60}")
         print(f"📥 收到旅行规划请求:")
         print("🚀 开始生成旅行计划...")
-        print("✅ 旅行计划生成成功,准备返回响应\n")
-        return TripPlanResponse(success=True, message="旅行计划生成成功")
+        
+        # 获取全局Agent实例
+        agent = get_agent()
+        
+        # 使用agent处理请求（根据你的实际需求调整参数）
+        result = agent.process(session_id=request.session_id, user_input=request.input)
+        
+        return TripPlanResponse(success=True, type=result.type, message=result.message)
     except Exception as e:
         print(f"❌ 生成旅行计划失败: {str(e)}")
         import traceback

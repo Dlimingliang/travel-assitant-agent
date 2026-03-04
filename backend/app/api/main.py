@@ -7,6 +7,7 @@ from ..config import get_settings,print_config,validate_config
 from ..agents.react_agent import ReActAgent
 from ..core import memory
 from ..core.mcp_client import get_mcp_registry
+from ..core.agent_manager import get_agent_manager
 
 # 获取配置
 settings = get_settings()
@@ -49,8 +50,10 @@ async def lifespan(app: FastAPI):
             memory=memory.Memory(),
             tools=registry.get_tools()  # 直接注入所有工具
         )
-        print(f"✅ Agent创建完成，加载了 {len(agent.tools)} 个工具")
-        
+        # 将Agent注册到全局管理器
+        get_agent_manager().set_agent(agent)
+        print("\n🤖 Agent创建成功")
+
         # 3. 测试工具调用（可选，演示如何使用）
         # if agent.tools:
         #     print("\n🔍 可用工具列表:")
@@ -71,7 +74,7 @@ async def lifespan(app: FastAPI):
         # 部分信息测试
         # agent.process("123123", "帮我规划一个北京的旅游计划")
         # 完整测试
-        agent.process("123123", "帮我规划一个北京的旅游计划，我计划3月20号，然后待3天，酒店不超过600块钱，相对便宜一点，环境好一点")
+        #agent.process("123123", "帮我规划一个北京的旅游计划，我计划3月20号，然后待3天，酒店不超过600块钱，相对便宜一点，环境好一点")
         
     except ValueError as e:
         print(f"\n❌ 配置验证失败:\n{e}")

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 # 请求模型
 class TripRequest(BaseModel):
     input: str = Field(..., description="用户自然语言输入")
+    session_id: str = Field(..., description="会话ID")
 
 # 响应模型
 class Location(BaseModel):
@@ -107,7 +108,7 @@ class TripPlanResponse(BaseModel):
     success: bool = Field(..., description="是否成功")
     type: TripPlanType = Field(..., description="响应类型 用于判定是结束还是追问")
     message: str = Field(default="", description="消息")
-    data: Optional[TripPlan] = Field(default=None, description="旅行计划数据")
+
 
 class POIInfo(BaseModel):
     """POI信息"""
