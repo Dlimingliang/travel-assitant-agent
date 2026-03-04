@@ -11,7 +11,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 2分钟超时，因为 Agent 处理可能较慢
+  timeout: 12000000, // 2分钟超时，因为 Agent 处理可能较慢
   headers: {
     'Content-Type': 'application/json',
   },

@@ -166,44 +166,62 @@ class ReActAgent(BaseModel):
         current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
         print(f"👤 用户输入: {user_input}")
-        prompt = f"""
-        你是一个旅行助手，需要从用户的对话中提取旅行信息。
-        如果用户的输入中不包含旅行信息，你要友好的提醒它，你能做什么，然后需要他补充什么信息。
-        你的语言要温柔、友好，禁止强硬的语气
-        
-        
-        当前已经收集到的信息:
+        prompt = f"""你是一个温柔友好的旅行助手，负责从用户对话中提取旅行计划信息。
+
+        ## 当前已收集的信息
         {current_info_str}
         
-        用户的最新消息:
+        ## 用户最新消息
         {user_input}
         
-        请提取信息，并按以下规则处理：
-        1. 额外信息：free_text_input（额外要求，例如"希望多安排一些博物馆"）用户可以不提供
-        2. 必要信息包括（必须提取以下所有字段）：
-           - city（目的地城市，例如"北京"）
-           - start_date（开始日期，格式YYYY-MM-DD，例如"2025-06-01"）
-           - travel_days（旅行天数，整数，例如3）
-           - accommodation（住宿偏好，例如"经济型酒店"）
-        3. 如果用户消息中提供了新信息，更新对应字段
-        4. 如果用户消息中没有提到某个字段，但当前信息中已有，则保留
-        5. 如果新消息与旧信息冲突，以新消息为准
-        6. complete 字段表示是否所有必要信息都已收集（布尔值）
-        7. missing_fields 列出所有尚未收集的必要信息，用中文列出，并总结为一句话,例如:请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数
-        8. 请严格按照 JSON Schema 格式返回，确保字段名与 schema 一致
-        9. 必须返回以下所有字段：complete, city, start_date, travel_days, accommodation, missing_fields
-        10. 每个字段都必须出现在JSON中，即使值为null
+        ## 任务说明
+        从用户消息中提取旅行信息，并与已收集的信息合并。
         
-        示例JSON格式：
+        ### 必要字段（4个）
+        | 字段 | 说明 | 示例 |
+        |------|------|------|
+        | city | 目的地城市 | "北京" |
+        | start_date | 开始日期(YYYY-MM-DD) | "2025-03-20" |
+        | travel_days | 旅行天数(整数) | 3 |
+        | accommodation | 住宿偏好 | "经济型酒店" |
+        
+        ### 可选字段
+        - free_text_input: 额外要求，如"希望多安排一些博物馆"
+        
+        ## 处理规则
+        1. 新消息中的信息 → 更新对应字段
+        2. 新消息未提及但已有的信息 → 保留原值
+        3. 新旧信息冲突 → 以新消息为准
+        
+        ## complete 判断逻辑（重要！）
+        请逐一检查以下4个必要字段的最终值：
+        - city 是否有值？
+        - start_date 是否有值？
+        - travel_days 是否有值？
+        - accommodation 是否有值？
+        
+        **只有当以上4个字段全部有值（非null）时，complete = true，否则 complete = false**
+        
+        ## missing_fields 生成规则
+        - 如果 complete = true → missing_fields = null
+        - 如果 complete = false → missing_fields = 用温柔的语气列出缺失的字段，例如："请告诉我您的出发日期和旅行天数哦~"
+        
+        ## 输出格式
+        严格按以下JSON格式输出，所有字段必须存在：
+        ```json
         {{
-          "complete": false,
-          "city": "北京",
-          "start_date": null,
-          "travel_days": null,
-          "accommodation": null,
-          "missing_fields": "请告诉我关于此次旅行的更多信息,包括目的地城市,旅行天数"
+          "complete": true或false,
+          "city": "城市名"或null,
+          "start_date": "YYYY-MM-DD"或null,
+          "travel_days": 整数或null,
+          "accommodation": "住宿偏好"或null,
+          "free_text_input": "额外要求"或null,
+          "missing_fields": "缺失提示"或null
         }}
-        """
+        ```
+        ```
+        
+        现在请处理用户的消息，输出JSON结果："""
         llm = get_llm()
         print(f"🧠 正在调用 {llm.model} 模型...")
         response = llm.client.chat.completions.create(
@@ -244,38 +262,68 @@ class ReActAgent(BaseModel):
 
             historyStr = json.dumps([msg.to_dict() for msg in self.memory.short_memory.get(session_id, [])], ensure_ascii=False)
             work_info = self.memory.work_memory.get(session_id, {})
-            # amap_maps_text_search 搜索景点 keywords 历史文化  city 北京
-            # maps_weather 查询天气 city 北京
-            prompt = f"""你是一个旅游助手, 你可以帮助用户完成旅游规划, 你可以使用工具来帮助用户完成任务。
-                   
-                
-                    ## 用户的最新输入:
-                    {user_input}
-                    
-                    # 必要的信息
-                    {work_info}
-                    
-                    # 历史消息
-                    History: {historyStr}
-                    
-                    ## 这里面有3项工作你是必须要完成的
-                    1. 帮助用户搜索景点
-                    2. 帮助用户搜索酒店
-                    3. 帮助用户查询天气
-                    4. 当你搜集到了足够的信息，请严格按照以下JSON格式返回旅行计划
-                    {res_simple_json}
-                    
-        
-                    ## 工作流程:
-                    1. 思考（Thought）: 分析用户需求，思考需要什么信息或采取什么行动
-                    2. 行动（Action）: 如果需要调用工具，请明确指出要调用哪个工具以及需要的参数
-                    3. 观察（Observation）: 根据工具返回的结果进行分析
+            
+            prompt = f"""你是一个专业的旅游规划助手，帮助用户制定完整的旅行计划。
 
-                    请开始你的思考，如果需要调用工具,则返回工具调用
-                    如果不需要调用工具，可以直接回答用户。
-                    注意：当信息足够返回，不需要调用工具的时候，只返回JSON格式的旅行计划，也不用遵循Thought、Action、Observation
-                    重点：只要json，只要json
-                    """
+## 当前信息
+
+**用户需求：** {work_info}
+**用户输入：** {user_input}
+
+## 对话历史
+{historyStr}
+
+---
+
+## 你的任务
+
+为用户规划旅行，需要完成以下3项信息收集：
+
+| # | 任务 | 工具 | 如何判断已完成 |
+|---|------|------|----------------|
+| 1 | 酒店 | `amap--maps_text_search` (keywords含"酒店") | 历史中有酒店搜索结果 |
+| 2 | 景点 | `amap--maps_text_search` (keywords含景点名) | 历史中有景点搜索结果 |
+| 3 | 天气 | `amap--maps_weather` | 历史中有天气查询结果 |
+
+---
+
+## 【核心】执行前必须完成的检查
+
+**请先逐一检查对话历史，回答以下问题：**
+
+1. 历史中是否已有酒店搜索的调用和结果？（查找 tool_name 包含 maps_text_search 且 keywords 包含"酒店"）
+2. 历史中是否已有景点搜索的调用和结果？（查找 tool_name 包含 maps_text_search 且 keywords 不含"酒店"）
+3. 历史中是否已有天气查询的调用和结果？（查找 tool_name 包含 maps_weather）
+
+**然后根据检查结果决定：**
+
+- **如果3项都已完成** → 立即输出JSON旅行计划，不调用任何工具
+- **如果有未完成项** → 只调用1个缺失任务的工具
+
+---
+
+## 输出规则
+
+### 未完成时：调用工具
+正常调用对应工具
+
+### 全部完成时：输出JSON（重要！）
+
+直接输出以下格式的纯JSON，**不要**有：
+- 任何开场白或解释
+- markdown代码块 ``` 标记  
+- "这是您的旅行计划"等文字
+
+JSON格式：
+{res_simple_json}
+
+---
+
+## 绝对禁止
+❌ 重复调用历史中已成功的工具
+❌ 在JSON外添加任何文字
+
+开始执行："""
 
             print(f"🧠 正在调用 {llm.model} 模型...")
             response = llm.client.chat.completions.create(
