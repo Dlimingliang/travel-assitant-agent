@@ -1,3 +1,6 @@
+from backend.app.models.schemas import AgentResponse
+
+
 from fastapi.routing import APIRouter
 
 
@@ -33,9 +36,8 @@ async def plan_trip(request: TripRequest):
         
         # 获取全局Agent实例
         agent = get_agent()
-        
         # 使用agent处理请求（根据你的实际需求调整参数）
-        result = agent.process(session_id=request.session_id, user_input=request.input)
+        result: AgentResponse = agent.process(session_id=request.session_id, user_input=request.input)
         
         return TripPlanResponse(success=True, type=result.type, message=result.message)
     except Exception as e:
