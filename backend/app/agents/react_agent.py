@@ -210,13 +210,7 @@ class ReActAgent(BaseModel):
         response = llm.client.chat.completions.create(
             model = llm.model,
             messages = [{"role":"user","content":prompt}],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "user_trip_plan",
-                    "schema": UserTripPlan.model_json_schema()
-                }
-            },
+            response_format={"type": "json_object"},
             temperature=0
         )
         content = response.choices[0].message.content
