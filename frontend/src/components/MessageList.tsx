@@ -1,18 +1,49 @@
 import React, { useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { ChatMessage as ChatMessageType } from '../types';
+import type { ChatMessage as ChatMessageType, TripPlan } from '../types';
+import { TripPlanCard } from './TripPlanCard';
 
 interface ChatMessageProps {
   message: ChatMessageType;
 }
 
+// 尝试解析旅行计划 JSON
+const tryParseTripPlan = (content: string): TripPlan | null => {
+  try {
+    // 尝试直接解析
+    const parsed = JSON.parse(content);
+    // 验证是否是有效的旅行计划结构
+    if (parsed && parsed.city && parsed.days && Array.isArray(parsed.days)) {
+      return parsed as TripPlan;
+    }
+    return null;
+  } catch {
+    // 如果直接解析失败，尝试查找 JSON 内容
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*"city"[\s\S]*"days"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed && parsed.city && parsed.days && Array.isArray(parsed.days)) {
+          return parsed as TripPlan;
+        }
+      }
+    } catch {
+      // 忽略解析错误
+    }
+    return null;
+  }
+};
+
 const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
+  
+  // 如果是助手消息，尝试解析为旅行计划（不强制要求 type === 'stop'）
+  const tripPlan = !isUser ? tryParseTripPlan(message.content) : null;
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div
-        className={`flex items-start gap-3 max-w-[85%] ${
+        className={`flex items-start gap-3 ${tripPlan ? 'max-w-[95%] w-full' : 'max-w-[85%]'} ${
           isUser ? 'flex-row-reverse' : 'flex-row'
         }`}
       >
@@ -27,7 +58,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
 
         {/* 消息内容 */}
         <div
-          className={`rounded-2xl px-4 py-3 ${
+          className={`rounded-2xl ${tripPlan ? 'px-4 py-4 flex-1' : 'px-4 py-3'} ${
             isUser
               ? 'bg-primary-500 text-white'
               : 'bg-white border border-gray-200 text-gray-800 shadow-sm'
@@ -35,7 +66,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         >
           {isUser ? (
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          ) : tripPlan ? (
+            // 展示旅行计划卡片
+            <TripPlanCard plan={tripPlan} />
           ) : (
+            // 普通 Markdown 内容
             <div className="markdown-content">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>

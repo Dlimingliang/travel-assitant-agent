@@ -44,7 +44,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className="border-t border-gray-200 bg-white px-4 py-4">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-end gap-3 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-3 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 transition-all">
+        <div className="flex items-center gap-3 bg-gray-50 rounded-2xl border border-gray-200 px-4 py-3 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 transition-all">
           <textarea
             ref={textareaRef}
             value={input}
@@ -53,7 +53,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-gray-800 placeholder-gray-400 min-h-[24px] max-h-[150px]"
+            className="flex-1 bg-transparent resize-none outline-none text-gray-800 placeholder-gray-400 min-h-[24px] max-h-[150px] leading-6"
           />
           <button
             onClick={handleSubmit}
