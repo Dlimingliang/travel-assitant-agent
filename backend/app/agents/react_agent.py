@@ -1,11 +1,12 @@
 import json
+import re
 from enum import Enum
 from typing import Any, Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
 from ..core import LlmMessage, MessageRole
-from ..core.memory import Memory
+from ..core.memory import get_session_memory_manager, StepType
 from ..core.llm_client import get_llm
 from ..core.mcp_client import  MCPTool
 from ..models.schemas import UserTripPlan, AgentResponse,TripPlanType
@@ -117,8 +118,8 @@ class AgentState(Enum):
     PERCEIVING = "perceiving"
     PLANNING = "planning"
     CLARIFY = "clarify" # 需要追问
+    EXECUTION = "execution"
     TOOL_CALL = "tool_call"
-    ERROR = "error"
 
 class ReActAgent(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
@@ -126,9 +127,7 @@ class ReActAgent(BaseModel):
     name: str = Field(..., description="名称")
     role: str = Field(..., description="助手")
     state: AgentState = AgentState.IDLE
-    memory: Memory = Field(description="记忆")
     tools: dict[str, MCPTool] = Field(description="工具", default={})
-    prompt: str = Field(description="提示词",default="")
 
     def get_tools_for_openai(self) -> List[Dict[str, Any]]:
         """
@@ -139,39 +138,21 @@ class ReActAgent(BaseModel):
             工具列表，每个工具都是 OpenAI function calling 格式
         """
         return [tool.to_openai_function_schema() for tool in self.tools.values()]
-    
-    def process(self, session_id:str, user_input:str) -> AgentResponse:
-
-        # 感知阶段
-        perceive_response = self.perceiving(session_id, user_input)
-        if perceive_response != "":
-            return AgentResponse(
-                type = TripPlanType.clarify,
-                message = perceive_response,
-            )
-        # 感知结束，拿到了必要的信息，开始执行规划和tool调用
-        # react开始 进入thought、action、observation
-
-        plan_response = self.planning(session_id, user_input)
-
-        return AgentResponse(
-            type = TripPlanType.stop,
-            message = plan_response,
-        )
-
 
     def perceiving(self, session_id: str,user_input: str) -> str:
         """感知用户输入，确认是否追问，如果需要，则进行追问，如果不需要则进行后面的阶段"""
         self.state = AgentState.PERCEIVING
-        current_info: dict[str, Any] | None = self.memory.work_memory.get(session_id)
+
+        # 读取上下文摘要(目前为粗糙的设计)
+        current_info = get_session_memory_manager().get_or_create_session_memory(session_id).short_memory.get_messages_for_llm()
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
         print(f"👤 用户输入: {user_input}")
         prompt = f"""你是一个温柔友好的旅行助手，负责从用户对话中提取旅行计划信息。
 
-        ## 当前已收集的信息
+        ## 历史上下文
         {current_info_str}
         
-        ## 用户最新消息
+        ## 用户最新输入
         {user_input}
         
         ## 任务说明
@@ -219,7 +200,6 @@ class ReActAgent(BaseModel):
           "missing_fields": "缺失提示"或null
         }}
         ```
-        ```
         
         现在请处理用户的消息，输出JSON结果："""
         llm = get_llm()
@@ -230,112 +210,125 @@ class ReActAgent(BaseModel):
             response_format={"type": "json_object"},
             temperature=0
         )
+
+        print(f"🤖 Assistant response: {response}")
         content = response.choices[0].message.content
         if content is None:
             # 处理空内容的情况
             raise Exception("llm返回为空")
         user_trip_plan = UserTripPlan(**json.loads(content))
-        # 把现在这个当做工作记忆
-        self.memory.add_work_memory(session_id=session_id, value=content)
         if not user_trip_plan.complete and user_trip_plan.missing_fields is not None:
             print(f"❌感知结束，用户提供信息不足,需要补充信息")
+            self.state = AgentState.CLARIFY
             return user_trip_plan.missing_fields
         print(f"✅ 感知结束，用户提供信息充足,可以进入规划阶段")
         return ""
 
-    def planning(self, session_id: str, user_input: str) -> str | None | Any:
-        """有了用户的意图，开始规划行动"""
-        self.state = AgentState.PLANNING
-        self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
-            role= MessageRole.user,
-            content=user_input,
-        ))
+    def planning(self, session_id: str, perception: str, user_input: str) -> str | None | Any:
+        """
+            规划阶段：制定行动计划（COT思维链）
+        """
 
-        llm = get_llm()
+        self.state = AgentState.PLANNING
+        # 读取上下文摘要(目前为粗糙的设计)
+        current_info = get_session_memory_manager().get_or_create_session_memory(
+            session_id).short_memory.get_messages_for_llm()
+        current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
 
         # 获取 OpenAI Function Calling 格式的工具列表
         openai_tools = self.get_tools_for_openai()
 
-        current_step = 0
-        while current_step < 20:
-            current_step += 1
+        prompt = f"""基于用户需求,现在制定详细的执行计划。
+        
+        历史上下文: {current_info_str}
+    
+        用户目标: {user_input}
+        分析结果: {perception}
+        
+        请使用思维链(Chain of Thought)分析并制定计划:
 
-            historyStr = json.dumps([msg.to_dict() for msg in self.memory.short_memory.get(session_id, [])], ensure_ascii=False)
-            work_info = self.memory.work_memory.get(session_id, {})
+        思考过程:
+        1. 用户的核心需求是什么？
+        2. 需要收集哪些信息？
+        3. 按什么顺序执行？
+        4. 有哪些依赖关系？
+
+        最终计划(用JSON数组格式):
+        ["步骤1", "步骤2", ...]"""
+
+        messages = [
+            {"role": "system", "content": "你是一个旅游规划专家，擅长制定详细的执行计划。你可以帮助用户搜索酒店、搜索景点、搜索天气，然后根据这些信息汇总帮助用户制定旅行计划"},
+            {"role": "user", "content": prompt}
+        ]
+
+        llm = get_llm()
+        print(f"🧠 正在调用 {llm.model} 模型...")
+        response = llm.client.chat.completions.create(
+            model=llm.model,
+            messages=messages,
+            tools=openai_tools if openai_tools else None,  # 传入工具定义
+            tool_choice="auto",  # 让模型自动决定是否调用工具
+            temperature=0,
+            timeout=10000000
+        )
+
+        print(f"🤖 Assistant planning response: {response}")
+        # 处理响应
+        message = response.choices[0].message
+        json_match = re.search(r'\[.*?\]', message, re.DOTALL)
+        if json_match:
+            plan = json.loads(json_match.group())
+            get_session_memory_manager().get_or_create_session_memory(session_id=session_id).working_memory.set_task_plan(plan)
+
+        return message
+
+    def execution(self, session_id: str, user_input: str) -> str | None | Any:
+        """
+        执行阶段: ReAct循环
+        """
+        self.state = AgentState.EXECUTION
+        memorySystem = get_session_memory_manager().get_or_create_session_memory(session_id)
+
+        llm = get_llm()
+        # 获取 OpenAI Function Calling 格式的工具列表
+        openai_tools = self.get_tools_for_openai()
+        user_prompt =memorySystem.build_prompt_context()
+
+        while not memorySystem.working_memory.is_step_limit_reached():
+
+            system_prompt = f"""你是一个旅游助手，使用ReAct框架解决问题。帮助用户制定完整的旅行计划。
+
+            ### 全部完成时：输出JSON（重要！）
             
-            prompt = f"""你是一个专业的旅游规划助手，帮助用户制定完整的旅行计划。
+            直接输出以下格式的纯JSON，**不要**有：
+            - 任何开场白或解释
+            - markdown代码块 ``` 标记  
+            - "这是您的旅行计划"等文字
+            
+            JSON格式：
+            {res_simple_json}
+            
+            ## 绝对禁止
+            ❌ 重复调用历史中已成功的工具
+            ❌ 在JSON外添加任何文字
+            
+            开始执行："""
 
-## 当前信息
-
-**用户需求：** {work_info}
-**用户输入：** {user_input}
-
-## 对话历史
-{historyStr}
-
----
-
-## 你的任务
-
-为用户规划旅行，需要完成以下3项信息收集：
-
-| # | 任务 | 工具 | 如何判断已完成 |
-|---|------|------|----------------|
-| 1 | 酒店 | `amap--maps_text_search` | 历史中有酒店搜索结果 |
-| 2 | 景点 | `amap--maps_text_search` | 历史中有景点搜索结果 |
-| 3 | 天气 | `amap--maps_weather` | 历史中有天气查询结果 |
-
----
-
-## 【核心】执行前必须完成的检查
-
-**请先逐一检查对话历史，回答以下问题：**
-
-1. 历史中是否已有酒店搜索的调用和结果？
-2. 历史中是否已有景点搜索的调用和结果？
-3. 历史中是否已有天气查询的调用和结果？
-
-**然后根据检查结果决定：**
-
-- **如果3项都已完成** → 立即输出JSON旅行计划，不调用任何工具
-- **如果有未完成项** → 只调用1个缺失任务的工具
-
----
-
-## 输出规则
-
-### 未完成时：调用工具
-正常调用对应工具
-
-### 全部完成时：输出JSON（重要！）
-
-直接输出以下格式的纯JSON，**不要**有：
-- 任何开场白或解释
-- markdown代码块 ``` 标记  
-- "这是您的旅行计划"等文字
-
-JSON格式：
-{res_simple_json}
-
----
-
-## 绝对禁止
-❌ 重复调用历史中已成功的工具
-❌ 在JSON外添加任何文字
-
-开始执行："""
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
 
             print(f"🧠 正在调用 {llm.model} 模型...")
             response = llm.client.chat.completions.create(
                 model=llm.model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 tools=openai_tools if openai_tools else None,  # 传入工具定义
                 tool_choice="auto",  # 让模型自动决定是否调用工具
                 temperature=0,
                 timeout=10000000
             )
-
-           # print(f"🤖 Assistant response: {response}")
+            print(f"🤖 Assistant response: {response}")
             # 处理响应
             message = response.choices[0].message
             # 检查是否有工具调用
@@ -345,22 +338,19 @@ JSON格式：
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     print(f"🔧 模型请求调用工具: {tool_name}")
-                    self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
-                        role=MessageRole.tool_calls,
-                        content=json.dumps({"tool_name": tool_name, "tool_args": tool_args}, ensure_ascii=False),
-                    ))
-                    #这里可以实际调用工具
+                    memorySystem.working_memory.add_react_step(StepType.ACTION, json.dumps(tool_call, ensure_ascii=False))
+                    # 这里可以实际调用工具
                     result = self.call_tool(tool_name, **tool_args)
-                    self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
-                        role=MessageRole.tool_calls,
-                        content=json.dumps(result, ensure_ascii=False),
-                    ))
+                    tool_result = {
+                        "tool_id": too_id,
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "tool_result": result,
+                    }
+                    memorySystem.working_memory.add_react_step(StepType.OBSERVATION,tool_result )
+                user_prompt = memorySystem.build_prompt_context()
             else:
                 print(f"💬 最终回复: {message.content}")
-                self.memory.add_short_memory(session_id=session_id, memory=LlmMessage(
-                    role=MessageRole.assistant,
-                    content=json.dumps(message.content, ensure_ascii=False),
-                ))
                 return message.content or ""
         return None
 
@@ -373,3 +363,37 @@ JSON格式：
         result = self.tools[tool_name].call(**kwargs)
         print(f"✅ 工具调用成功: {tool_name}")
         return result
+
+    def process(self, session_id: str, user_input: str) -> AgentResponse:
+        """
+        主流程: 感知 -> 规划 -> 执行 -> 返回 (目前不需要反思)
+        """
+        memorySystem = get_session_memory_manager().get_or_create_session_memory(session_id)
+
+        # 在一次执行的开始和结束记录
+        # 首先记录用户输入
+        memorySystem.short_memory.add_message(MessageRole.user, user_input)
+
+        # 1. 感知阶段
+        perceive_response = self.perceiving(session_id, user_input)
+        # 需要补充信息
+        if perceive_response != "":
+            return AgentResponse(
+                type=TripPlanType.clarify,
+                message=perceive_response,
+            )
+        # 2. 规划阶段
+        # 每次执行前要清空工作记忆
+        memorySystem.working_memory.init_task(user_input)
+        plan_response = self.planning(session_id, perceive_response, user_input)
+
+        # 3. 执行阶段
+        execution_res = self.execution(session_id, plan_response)
+
+        # 4. 返回结果
+        # 记录助手回答
+        memorySystem.short_memory.add_message(MessageRole.assistant, execution_res)
+        return AgentResponse(
+            type=TripPlanType.stop,
+            message=execution_res,
+        )

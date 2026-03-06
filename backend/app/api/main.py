@@ -47,7 +47,6 @@ async def lifespan(app: FastAPI):
         agent = ReActAgent(
             name=settings.app_name, 
             role=settings.app_name, 
-            memory=memory.Memory(),
             tools=registry.get_tools()  # 直接注入所有工具
         )
         # 将Agent注册到全局管理器
