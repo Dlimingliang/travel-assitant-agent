@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, List, Dict
 
@@ -253,11 +254,17 @@ class ReActAgent(BaseModel):
         3. 按什么顺序执行？
         4. 有哪些依赖关系？
 
+        ## 重要要求
+        计划的最后一步必须是"生成最终旅行计划"，用于汇总所有收集到的信息并输出完整的旅行方案。
+
         最终计划(用JSON数组格式):
-        ["步骤1", "步骤2", ...]"""
+        ["步骤1: 具体操作", "步骤2: 具体操作", ..., "步骤N: 生成最终旅行计划"]
+        
+        示例输出:
+        ["搜索目的地天气信息", "搜索热门景点", "搜索推荐酒店", "生成最终旅行计划"]"""
 
         messages = [
-            {"role": "system", "content": "你是一个旅游规划专家，擅长制定详细的执行计划。你可以帮助用户搜索酒店、搜索景点、搜索天气，然后根据这些信息汇总帮助用户制定旅行计划"},
+            {"role": "system", "content": "你是一个旅游规划专家，擅长制定详细的执行计划。你可以帮助用户搜索酒店、搜索景点、搜索天气，然后根据这些信息汇总帮助用户制定旅行计划。计划的最后一步永远是生成最终旅行计划。"},
             {"role": "user", "content": prompt}
         ]
 
@@ -275,12 +282,18 @@ class ReActAgent(BaseModel):
         print(f"🤖 Assistant planning response: {response}")
         # 处理响应
         message = response.choices[0].message
-        json_match = re.search(r'\[.*?\]', message, re.DOTALL)
+        content = message.content or ""
+        # 从返回内容中提取JSON数组格式的计划
+        json_match = re.search(r'\[.*?\]', content, re.DOTALL)
         if json_match:
             plan = json.loads(json_match.group())
+            # 确保最后一步是生成最终计划
+            if plan and not any("最终" in step or "生成" in step for step in plan[-1:]):
+                plan.append("生成最终旅行计划")
             get_session_memory_manager().get_or_create_session_memory(session_id=session_id).working_memory.set_task_plan(plan)
+            print(f"📋 执行计划: {plan}")
 
-        return message
+        return content
 
     def execution(self, session_id: str, user_input: str) -> str | None | Any:
         """
@@ -338,7 +351,21 @@ class ReActAgent(BaseModel):
                     tool_name = tool_call.function.name
                     tool_args = json.loads(tool_call.function.arguments)
                     print(f"🔧 模型请求调用工具: {tool_name}")
-                    memorySystem.working_memory.add_react_step(StepType.ACTION, json.dumps(tool_call, ensure_ascii=False))
+                    # 将 tool_call 对象转换为可序列化的字典
+                    tool_call_dict = {
+                        "id": tool_call.id,
+                        "type": tool_call.type,
+                        "function": {
+                            "name": tool_call.function.name,
+                            "arguments": tool_call.function.arguments
+                        }
+                    }
+                    memorySystem.working_memory.add_react_step(
+                        StepType.ACTION,
+                        json.dumps(tool_call_dict, ensure_ascii=False),
+                        datetime.now(),
+                        {"tool_name": tool_name}
+                    )
                     # 这里可以实际调用工具
                     result = self.call_tool(tool_name, **tool_args)
                     tool_result = {
@@ -347,7 +374,12 @@ class ReActAgent(BaseModel):
                         "tool_args": tool_args,
                         "tool_result": result,
                     }
-                    memorySystem.working_memory.add_react_step(StepType.OBSERVATION,tool_result )
+                    memorySystem.working_memory.add_react_step(
+                        StepType.OBSERVATION,
+                        json.dumps(tool_result, ensure_ascii=False, default=str),
+                        datetime.now(),
+                        {"tool_name": tool_name}
+                    )
                 user_prompt = memorySystem.build_prompt_context()
             else:
                 print(f"💬 最终回复: {message.content}")
@@ -388,7 +420,7 @@ class ReActAgent(BaseModel):
         plan_response = self.planning(session_id, perceive_response, user_input)
 
         # 3. 执行阶段
-        execution_res = self.execution(session_id, plan_response)
+        execution_res = self.execution(session_id = session_id, user_input = user_input)
 
         # 4. 返回结果
         # 记录助手回答

@@ -128,7 +128,7 @@ class MemorySystem:
 
         # 从工作任务中提取当前任务信息
         if self.working_memory.task_context:
-            parts.append(f"[当前目标]\n{self.working_memory.task_context.goal}")
+            parts.append(f"[当前目标]\n{self.working_memory.task_context.user_goal}")
 
             if self.working_memory.task_context.current_plan:
                 plan_str = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(self.working_memory.task_context.current_plan))
@@ -138,6 +138,8 @@ class MemorySystem:
         react_trace = self.working_memory.get_react_trace()
         if react_trace:
             parts.append(f"[推理过程]\n{react_trace}")
+
+        return "\n\n".join(parts)
 
     def reset_memory(self) -> None:
         """重置整个记忆"""
