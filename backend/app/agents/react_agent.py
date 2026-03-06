@@ -307,7 +307,9 @@ class ReActAgent(BaseModel):
         openai_tools = self.get_tools_for_openai()
         user_prompt =memorySystem.build_prompt_context()
 
-        while not memorySystem.working_memory.is_step_limit_reached():
+        currentStep = 0
+        while currentStep < memorySystem.working_memory.max_steps:
+            currentStep += 1
 
             system_prompt = f"""你是一个旅游助手，使用ReAct框架解决问题。帮助用户制定完整的旅行计划。
 

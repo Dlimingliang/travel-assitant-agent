@@ -24,7 +24,6 @@ class TaskContext(BaseModel):
     """当前任务上下文"""
     user_goal: str
     current_plan: list[str] = Field(default_factory=list)
-    current_step: int = 0
 
 class WorkMemory:
     """
@@ -59,14 +58,7 @@ class WorkMemory:
         """设置执行计划"""
         if self.task_context:
             self.task_context.current_plan = plans
-            self.task_context.current_step = 0
-    def advance_step(self):
-        """进行下一步"""
-        if self.task_context:
-            self.task_context.current_step += 1
-    def is_step_limit_reached(self) -> bool:
-        """检查是否达到步骤上限"""
-        return self.task_context.current_step >= self.max_react_steps
+
     def clear(self):
         """清空工作记忆"""
         self.task_context = None
