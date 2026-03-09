@@ -307,7 +307,7 @@ class ReActAgent(BaseModel):
         user_prompt =memorySystem.build_prompt_context()
 
         currentStep = 0
-        while currentStep < memorySystem.working_memory.max_steps:
+        while currentStep < memorySystem.working_memory.max_react_steps:
             currentStep += 1
 
             system_prompt = f"""你是一个旅游助手，使用ReAct框架解决问题。帮助用户制定完整的旅行计划。
