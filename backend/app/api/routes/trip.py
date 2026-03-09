@@ -1,15 +1,11 @@
-from backend.app.models.schemas import AgentResponse
-
-
-from fastapi.routing import APIRouter
-
-
 from fastapi import APIRouter, HTTPException
+
+from backend.app.models.schemas import AgentResponse
+from ...core.agent_manager import get_agent
 from ...models.schemas import (
     TripRequest,
     TripPlanResponse,
 )
-from ...core.agent_manager import get_agent
 
 router: APIRouter = APIRouter(prefix="/trip", tags=["旅行规划"])
 

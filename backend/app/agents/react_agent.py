@@ -2,15 +2,15 @@ import json
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, List, Dict
+from typing import Any, List, Dict
 
 from pydantic import BaseModel, Field
 
-from ..core import LlmMessage, MessageRole
-from ..core.memory import get_session_memory_manager, StepType
+from ..core import MessageRole
 from ..core.llm_client import get_llm
-from ..core.mcp_client import  MCPTool
-from ..models.schemas import UserTripPlan, AgentResponse,TripPlanType
+from ..core.mcp_client import MCPTool
+from ..core.memory import get_memory, StepType
+from ..models.schemas import UserTripPlan, AgentResponse, TripPlanType
 
 res_json = """
 ```json
@@ -145,7 +145,7 @@ class ReActAgent(BaseModel):
         self.state = AgentState.PERCEIVING
 
         # 读取上下文摘要(目前为粗糙的设计)
-        current_info = get_session_memory_manager().get_or_create_session_memory(session_id).short_memory.get_messages_for_llm()
+        current_info =get_memory(session_id).short_memory.get_messages_for_llm()
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
         print(f"👤 用户输入: {user_input}")
         prompt = f"""你是一个温柔友好的旅行助手，负责从用户对话中提取旅行计划信息。
@@ -232,8 +232,7 @@ class ReActAgent(BaseModel):
 
         self.state = AgentState.PLANNING
         # 读取上下文摘要(目前为粗糙的设计)
-        current_info = get_session_memory_manager().get_or_create_session_memory(
-            session_id).short_memory.get_messages_for_llm()
+        current_info =get_memory(session_id).short_memory.get_messages_for_llm()
         current_info_str = json.dumps(current_info, ensure_ascii=False) if current_info else "暂无"
 
         # 获取 OpenAI Function Calling 格式的工具列表
@@ -290,7 +289,7 @@ class ReActAgent(BaseModel):
             # 确保最后一步是生成最终计划
             if plan and not any("最终" in step or "生成" in step for step in plan[-1:]):
                 plan.append("生成最终旅行计划")
-            get_session_memory_manager().get_or_create_session_memory(session_id=session_id).working_memory.set_task_plan(plan)
+            get_memory(session_id=session_id).working_memory.set_task_plan(plan)
             print(f"📋 执行计划: {plan}")
 
         return content
@@ -300,7 +299,7 @@ class ReActAgent(BaseModel):
         执行阶段: ReAct循环
         """
         self.state = AgentState.EXECUTION
-        memorySystem = get_session_memory_manager().get_or_create_session_memory(session_id)
+        memorySystem = get_memory(session_id)
 
         llm = get_llm()
         # 获取 OpenAI Function Calling 格式的工具列表
@@ -402,7 +401,7 @@ class ReActAgent(BaseModel):
         """
         主流程: 感知 -> 规划 -> 执行 -> 返回 (目前不需要反思)
         """
-        memorySystem = get_session_memory_manager().get_or_create_session_memory(session_id)
+        memorySystem = get_memory(session_id)
 
         # 在一次执行的开始和结束记录
         # 首先记录用户输入

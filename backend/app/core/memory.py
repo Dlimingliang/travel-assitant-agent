@@ -6,7 +6,6 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 from .llm_message import LlmMessage, MessageRole
 
-
 class StepType(Enum):
     """ReAct步骤类型"""
     THOUGHT = "thought"
@@ -191,3 +190,6 @@ def get_session_memory_manager() -> SessionMemoryManager:
         _session_memory_manager = SessionMemoryManager()
 
     return _session_memory_manager
+
+def get_memory(session_id: str) -> MemorySystem:
+    return get_session_memory_manager().get_or_create_session_memory(session_id)
